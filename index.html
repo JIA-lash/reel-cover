@@ -19,8 +19,14 @@
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
   html,body{margin:0; height:100%; background:var(--bg); color:var(--text);
     font-family:-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif; overscroll-behavior:none}
-  body{display:flex; flex-direction:column; height:100dvh;
-    padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom)}
+  /* 화면 전체를 꽉 채운다 (아이폰 홈 화면 앱에서 100dvh가 어긋나 아래가 비는 문제 방지) */
+  body{position:fixed; inset:0; display:flex; flex-direction:column; padding-top:env(safe-area-inset-top)}
+  #editor{background:var(--panel); border-top:1px solid var(--line); padding-bottom:env(safe-area-inset-bottom)}
+  #grab{display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:30px;
+    border:0; background:none; color:var(--sub); font-size:13px; font-family:inherit; touch-action:none; cursor:pointer}
+  #grab .bar{width:40px; height:5px; border-radius:3px; background:#5a524d}
+  body.collapsed #grab{height:50px; font-size:15px; color:var(--accent); font-weight:700}
+  body.collapsed nav, body.collapsed #panel{display:none}
   header{display:flex; align-items:center; justify-content:space-between; padding:8px 14px}
   header h1{font-size:17px; margin:0; font-weight:700}
   .btn{appearance:none; border:1px solid var(--line); background:var(--panel); color:var(--text);
@@ -33,6 +39,7 @@
   #wrap canvas{position:absolute; inset:0; width:100%; height:100%}
   #g{pointer-events:none}
   nav{display:flex; border-top:1px solid var(--line); background:var(--panel)}
+  #editor nav{border-top:0}
   nav button{flex:1; appearance:none; border:0; background:none; color:var(--sub); font-size:15px;
     padding:11px 0; font-family:inherit}
   nav button.on{color:var(--accent); font-weight:700; box-shadow:inset 0 2px 0 var(--accent)}
@@ -88,6 +95,8 @@
 
 <div id="stage"><div id="wrap"><canvas id="c"></canvas><canvas id="g"></canvas></div></div>
 
+<div id="editor">
+<button id="grab" aria-label="편집기 내리기·올리기"><span class="bar"></span><span id="grabLbl">▾ 내리기</span></button>
 <nav>
   <button data-tab="photo" class="on">사진</button>
   <button data-tab="filter">필터</button>
@@ -176,6 +185,7 @@
     <div id="tplList"></div>
   </section>
 </div>
+</div><!-- /editor -->
 
 <div id="modal">
   <img id="modalImg" alt="완성된 커버">
@@ -231,6 +241,7 @@ let S = { bg: '#1a1716', zoom: 1, panX: 0, panY: 0, filter: 'none', strength: 'b
 let IMG = null;
 const snap = { v: false, h: false }; // 지금 가운데에 붙어 있는지 (중앙선 표시용)
 const SNAP = 36; // 가운데에서 이만큼(1080px 기준) 안쪽이면 붙는다
+let collapsed = false; // 편집기를 내려서 커버만 크게 보는 중인지
 let userFonts = []; // {id, label}
 
 const clean = (o) => JSON.parse(JSON.stringify(o, (k, v) => (k.startsWith('_') ? undefined : v)));
@@ -348,7 +359,7 @@ function draw() {
 
 function drawGuide() {
   gtx.clearRect(0, 0, W, H);
-  if (S.guide !== 'off') {
+  if (S.guide !== 'off' && !collapsed) {
     const gh = S.guide === '34' ? W * 4 / 3 : W, y0 = (H - gh) / 2;
     gtx.fillStyle = 'rgba(0,0,0,0.4)';
     gtx.fillRect(0, 0, W, y0); gtx.fillRect(0, y0 + gh, W, H - y0 - gh);
@@ -363,7 +374,7 @@ function drawGuide() {
   gtx.lineWidth = 4; gtx.strokeStyle = '#ff3b8d';
   if (snap.v) { gtx.beginPath(); gtx.moveTo(W / 2, 0); gtx.lineTo(W / 2, H); gtx.stroke(); }
   if (snap.h) { gtx.beginPath(); gtx.moveTo(0, H / 2); gtx.lineTo(W, H / 2); gtx.stroke(); }
-  if (t && t._box) {
+  if (!collapsed && t && t._box) {
     const p = 14, b = t._box;
     gtx.setLineDash([14, 10]); gtx.lineWidth = 4; gtx.strokeStyle = '#ffd36b';
     gtx.strokeRect(b.x - p, b.y - p, b.w + p * 2, b.h + p * 2);
@@ -463,6 +474,22 @@ function endPointer(e) {
 }
 wrap.addEventListener('pointerup', endPointer);
 wrap.addEventListener('pointercancel', endPointer);
+
+/* ---------- 편집기 내리기·올리기 (손잡이를 누르거나 위아래로 쓸기) ---------- */
+function setCollapsed(v) {
+  collapsed = v;
+  document.body.classList.toggle('collapsed', v);
+  $('grabLbl').textContent = v ? '▴ 편집 열기' : '▾ 내리기';
+  fit(); requestDraw();
+}
+let grabY = null;
+$('grab').addEventListener('pointerdown', (e) => { grabY = e.clientY; $('grab').setPointerCapture(e.pointerId); });
+$('grab').addEventListener('pointerup', (e) => {
+  if (grabY === null) return;
+  const dy = e.clientY - grabY; grabY = null;
+  if (dy > 25) setCollapsed(true); else if (dy < -25) setCollapsed(false); else setCollapsed(!collapsed);
+});
+$('grab').addEventListener('pointercancel', () => { grabY = null; });
 
 /* ---------- 탭 ---------- */
 function showTab(name) {
