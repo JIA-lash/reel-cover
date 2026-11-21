@@ -22,7 +22,7 @@
   /* 화면 전체를 꽉 채운다 (아이폰 홈 화면 앱에서 100dvh가 어긋나 아래가 비는 문제 방지) */
   body{position:fixed; inset:0; display:flex; flex-direction:column; padding-top:env(safe-area-inset-top)}
   #editor{background:var(--panel); border-top:1px solid var(--line); padding-bottom:env(safe-area-inset-bottom)}
-  #grab{display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:30px;
+  #grab{display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:36px;
     border:0; background:none; color:var(--sub); font-size:13px; font-family:inherit; touch-action:none; cursor:pointer}
   #grab .bar{width:40px; height:5px; border-radius:3px; background:#5a524d}
   body.collapsed #grab{height:50px; font-size:15px; color:var(--accent); font-weight:700}
@@ -96,7 +96,7 @@
 <div id="stage"><div id="wrap"><canvas id="c"></canvas><canvas id="g"></canvas></div></div>
 
 <div id="editor">
-<button id="grab" aria-label="편집기 내리기·올리기"><span class="bar"></span><span id="grabLbl">▾ 내리기</span></button>
+<button id="grab" aria-label="편집기 내리기·올리기"><span class="bar"></span><span id="grabLbl">↕ 끌어서 크기 조절</span></button>
 <nav>
   <button data-tab="photo" class="on">사진</button>
   <button data-tab="filter">필터</button>
@@ -475,21 +475,46 @@ function endPointer(e) {
 wrap.addEventListener('pointerup', endPointer);
 wrap.addEventListener('pointercancel', endPointer);
 
-/* ---------- 편집기 내리기·올리기 (손잡이를 누르거나 위아래로 쓸기) ---------- */
+/* ---------- 편집기 크기 조절 (손잡이를 위아래로 끌기 · 누르면 접기/펴기) ---------- */
+const MIN_H = 90;                                   // 이보다 작게 끌어내리면 편집기를 접는다
+const maxH = () => Math.round(innerHeight * 0.75);  // 커버가 너무 작아지지 않게
+let panelH = +localStorage.getItem('reelcover.panelH') || Math.round(innerHeight * 0.38);
+function applyPanelH() {
+  panelH = Math.max(MIN_H, Math.min(maxH(), panelH));
+  $('panel').style.height = panelH + 'px';
+}
 function setCollapsed(v) {
   collapsed = v;
   document.body.classList.toggle('collapsed', v);
-  $('grabLbl').textContent = v ? '▴ 편집 열기' : '▾ 내리기';
+  $('grabLbl').textContent = v ? '▴ 편집 열기' : '↕ 끌어서 크기 조절';
+  if (!v) applyPanelH();
   fit(); requestDraw();
 }
-let grabY = null;
-$('grab').addEventListener('pointerdown', (e) => { grabY = e.clientY; $('grab').setPointerCapture(e.pointerId); });
-$('grab').addEventListener('pointerup', (e) => {
-  if (grabY === null) return;
-  const dy = e.clientY - grabY; grabY = null;
-  if (dy > 25) setCollapsed(true); else if (dy < -25) setCollapsed(false); else setCollapsed(!collapsed);
+let grab = null;
+$('grab').addEventListener('pointerdown', (e) => {
+  grab = { y: e.clientY, h: collapsed ? 0 : panelH, moved: false };
+  $('grab').setPointerCapture(e.pointerId);
 });
-$('grab').addEventListener('pointercancel', () => { grabY = null; });
+$('grab').addEventListener('pointermove', (e) => {
+  if (!grab) return;
+  const dy = e.clientY - grab.y;
+  if (Math.abs(dy) > 6) grab.moved = true;
+  if (!grab.moved) return;
+  const h = grab.h - dy; // 위로 끌면 커지고, 아래로 끌면 작아진다
+  if (h < MIN_H * 0.6) { if (!collapsed) setCollapsed(true); return; }
+  if (collapsed) setCollapsed(false);
+  panelH = h; applyPanelH(); fit(); requestDraw();
+});
+function endGrab() {
+  if (!grab) return;
+  if (!grab.moved) setCollapsed(!collapsed);          // 그냥 누르면 접기/펴기
+  else localStorage.setItem('reelcover.panelH', panelH); // 끌어서 정한 크기는 기억
+  grab = null;
+}
+$('grab').addEventListener('pointerup', endGrab);
+$('grab').addEventListener('pointercancel', endGrab);
+addEventListener('resize', () => { if (!collapsed) applyPanelH(); });
+applyPanelH();
 
 /* ---------- 탭 ---------- */
 function showTab(name) {

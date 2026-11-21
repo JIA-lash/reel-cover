@@ -1,6 +1,6 @@
 // 앱 파일을 폰에 저장해 두고, 인터넷이 없어도 열리게 한다.
 // 앱을 고치면 아래 버전 숫자를 올린다 (v1 → v2).
-const V = 'reelcover-v7';
+const V = 'reelcover-v8';
 const ASSETS = ['./', './index.html', './manifest.webmanifest', './icon-180.png', './icon-192.png', './icon-512.png', './filters/paper.webp'];
 
 self.addEventListener('install', (e) => {
